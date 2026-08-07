@@ -12,6 +12,7 @@ const mySynth = new Synth();
 const explodeSound = loadResource("explode.mp3");
 /** @type {Sound} */
 const hitSound = loadResource("graze.mp3");
+const warning = loadResource("!2.png"); 
 
 //#region functions
 
@@ -267,6 +268,7 @@ class PLAYER extends ElementScript {
             hitSound.play();
             if (this.health <= 0) {
                 obj.remove();
+                location.reload();
             }
         }
 
@@ -354,43 +356,35 @@ class BIG_FALLING_STAR extends ElementScript {
         obj.scripts.removeDefault();
         this.position = myTarget;
         this.target = myTarget;
-        this.timer = 0;
         this.widthHeight = 50;
-        obj.defaultShape = new Rect(myTarget.x - this.widthHeight / 2, myTarget.y - this.widthHeight / 2, this.widthHeight, this.widthHeight);
-
+        obj.defaultShape = new Rect(0,0, this.widthHeight, this.widthHeight).center(myTarget);
+        this.star = false;
     }
 
     /** @param {WorldObject} obj */
     update(obj) {
-        this.timer++;
-        if (this.timer === 90) {
+        if (obj.lifeSpan === 90) {
             obj.scripts.add(ONLY_COLLISION);
             obj.scripts(PHYSICS).mobile = true;
             obj.defaultShape = getStar(5, 75, 0.5);
-            let distanceMovedX = Random.int(-200, 200);
-            let distanceMovedY = this.target.y - (ourArena.min.y - 100);
+            const distanceMovedX = Random.int(-200, 200);
+            const distanceMovedY = this.target.y - (ourArena.min.y - 100);
             obj.transform.position = new Vector2(this.target.x + distanceMovedX, ourArena.min.y - 100);
             // obj.transform.position = ourArena.middle;
-            this.velocity = new Vector2(-distanceMovedX / 60, distanceMovedY / 60);
-            console.log(this.velocity);
-            this.starRotation = 0.1;
-        }
-        else if (this.timer > 90) {
-            obj.transform.position.add(this.velocity);
-            obj.transform.rotation += this.starRotation;
+            obj.scripts(PHYSICS).velocity = new Vector2(-distanceMovedX / 60, distanceMovedY / 60);
+            obj.scripts(PHYSICS).angularVelocity = 0.1;
+            this.star = true;
         }
 
-
-
-        if (this.timer > 150) {
-            let hitWall = !!obj.scripts(PHYSICS).colliding.test((collision) => {
+        if (obj.lifeSpan > 150) {
+            const hitWall = !!obj.scripts(PHYSICS).colliding.test((collision) => {
                 return collision.element.scripts.has(ARENA_WALLS);
             });
             if (hitWall) {
-                let j = Random.int(8, 12);
-                for (let i = 0; i < j; i++) {
+                const count = Random.int(8, 12);
+                for (let i = 0; i < count; i++) {
                     SMALL_STAR.create(Random.circle(0.5), obj.transform.position.get());
-                };
+                }
                 obj.remove();
             }
         }
@@ -398,10 +392,11 @@ class BIG_FALLING_STAR extends ElementScript {
     }
 
     draw(obj, name, shape) {
-        if (this.timer < 90) {
-            renderer.stroke(new Color(255, 0, 0, 1), 10, LineCap.ROUND, LineJoin.ROUND).shape(shape);
+        if (!this.star) {
+            // renderer.stroke(new Color(255, 0, 0, 1), 10, LineCap.ROUND, LineJoin.ROUND).shape(shape);
+            renderer.image(warning).rect(shape);
         }
-        else if (this.timer > 90) {
+        else {
             renderer.draw(new Color(255, 255, 255, 1)).shape(shape);
         }
     }
