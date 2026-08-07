@@ -584,3 +584,5 @@ intervals.continuous((frameCounter) => {
         starSpawners[1](ourPlayer);
     } 
 });
+
+// hi
