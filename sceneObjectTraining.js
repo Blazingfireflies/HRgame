@@ -1,19 +1,17 @@
-// file:///C:/Users/battl/Desktop/Coding/learningHengine.html
-
 canvas.clearScreen = () => (renderer.fill(new Color(0, 0, 0, 1)));
-
 
 width = 1056;
 height = 590;
+let spawnerCycle = 300; // was 1200
 let ourArena = new Rect(300, 100, 400, 400);
 scene.physics.gravity.y = 0.3;
 scene.mouseEvents = false;
-let mySynth = new Synth();
-// let mySound = new Sound(new HengineSoundResource.constructor(("touhou-old-powerup-sfx.mp3")));
-// console.log(mySound);
+const mySynth = new Synth();
 
-
-
+/** @type {Sound} */
+const explodeSound = loadResource("explode.mp3");
+/** @type {Sound} */
+const hitSound = loadResource("graze.mp3");
 
 //#region functions
 
@@ -54,8 +52,10 @@ let getStarPointVertices = (star) => {
     return goodArray;
 };
 
-//#endregion
 
+
+
+//#endregion
 
 
 //#region classes
@@ -88,7 +88,7 @@ class LOVELY_STAR extends ElementScript {
             // mySynth.play({duration:100, note:'A', octave:5, wave:"sine", volume:0.4});
             // mySynth.play({duration:200, note:'A', octave:4, wave:"sine", volume:0.3});
             // mySynth.play({duration:400, note:'A', octave:3, wave:"sine", volume:0.3});
-            // mySound.play();
+            explodeSound.play(0.3);
             let myStarPoints = getStarPointVertices(obj);
             for (let i = 0; i < myStarPoints.length; i++) {
                 SMALL_STAR.create(myStarPoints[i].get(), obj.transform.position.get());
@@ -222,113 +222,6 @@ class SCROLLING_STAR extends ElementScript {
 
 }
 
-class SCROLLING_STAR_SPAWNER extends ElementScript {
-    init(obj) {
-        obj.scripts.removeDefault();
-        this.timer = 0;
-    }
-
-    /** @param {WorldObject} obj */
-    update(obj) {
-        this.timer++;
-        if (this.timer % 15 === 0) {
-            if (Random.bool(0.5)) { // was 0.2, then 0.4. Random size used to go down all the way to 5
-                SCROLLING_STAR.create(Random.int(10, 20), new Vector2(ourArena.max.x + 75, Random.int(ourArena.min.y + 5, ourArena.max.y - 5)), new Vector2(-1, 0));
-            }
-        }
-
-        if (this.timer === 1200) {
-            obj.remove();
-        }
-    }
-    static create() {
-        // create scene object
-        let myElement = scene.main.addElement("ScrollingStarSpawner", 0, 0);
-
-        // attach script as behavior
-        myElement.scripts.add(SCROLLING_STAR_SPAWNER);
-        // return it to the wonderful person who called create()
-        return myElement;
-    }
-}
-
-class LOVELY_STAR_SPAWNER extends ElementScript {
-
-    init(obj) {
-        obj.scripts.removeDefault();
-        this.timer = 0;
-        // this.myDirection = new Vector2(1,1);
-    }
-
-    /** @param {WorldObject} obj */
-    update(obj) {
-        this.timer++;
-
-        if (this.timer % 60 === 0) {
-            LOVELY_STAR.create();
-        }
-
-        if (this.timer === 1200) {
-            obj.remove();
-        }
-
-        // if (this.timer === 20 || this.timer === 40 || this.timer === 60) {
-        //     LOVELY_STAR.create();
-        // }
-        // else if (this.timer === 120)  {
-        //     this.timer = 0;
-        // }
-    }
-
-    static create() {
-        // create scene object
-        let myElement = scene.main.addElement("LovelyStarSpawner", 0, 0);
-
-        // attach script as behavior
-        myElement.scripts.add(LOVELY_STAR_SPAWNER);
-        // return it to the wonderful person who called create()
-        return myElement;
-    }
-}
-
-class BIG_STAR_SPAWNER extends ElementScript {
-    init(obj, myPlayer) {
-        obj.scripts.removeDefault();
-        this.player = myPlayer;
-        this.timer = 0;
-        // this.myDirection = new Vector2(1,1);
-    }
-
-    /** @param {WorldObject} obj */
-    update(obj) {
-        this.timer++;
-
-        if (this.timer % 180 === 0) {
-            BIG_FALLING_STAR.create(this.player.scripts(PLAYER).position.get());
-        }
-
-        if (this.timer === 1200) {
-            obj.remove();
-        }
-    }
-
-    static create(myPlayer) {
-        // create scene object
-        let myElement = scene.main.addElement("BigStarSpawner", 0, 0);
-
-        // attach script as behavior
-        myElement.scripts.add(BIG_STAR_SPAWNER, myPlayer);
-        // return it to the wonderful person who called create()
-        return myElement;
-    }
-}
-
-// class FALL_OVER extends ElementScript {
-//     init(obj) {
-//         obj.transform.rotation += 1;
-//     }
-// }
-
 class PLAYER extends ElementScript {
 
     /** @param {WorldObject} obj */
@@ -369,8 +262,9 @@ class PLAYER extends ElementScript {
         if (hit && this.iFrames === 0) {
             this.iFrames = 30;
             this.health -= 20;
-            mySynth.play({ duration: 100, note: 'E', octave: 3, wave: "sawtooth", volume: 0.5 });
-            mySynth.play({ duration: 100, note: 'F', octave: 3, volume: 2 });
+            // mySynth.play({ duration: 100, note: 'E', octave: 3, wave: "sawtooth", volume: 0.5 });
+            // mySynth.play({ duration: 100, note: 'F', octave: 3, volume: 2 });
+            hitSound.play();
             if (this.health <= 0) {
                 obj.remove();
             }
@@ -463,7 +357,7 @@ class BIG_FALLING_STAR extends ElementScript {
         this.timer = 0;
         this.widthHeight = 50;
         obj.defaultShape = new Rect(myTarget.x - this.widthHeight / 2, myTarget.y - this.widthHeight / 2, this.widthHeight, this.widthHeight);
-   
+
     }
 
     /** @param {WorldObject} obj */
@@ -567,22 +461,84 @@ class HEALTH_BAR extends ElementScript {
     }
 }
 
+class GENERAL_SPAWNER extends ElementScript {
+    init(obj, mySpawningFunction, minTime, maxTime) {
+        obj.scripts.removeDefault();
+        this.minTime = minTime;
+        this.maxTime = maxTime;
+        this.spawn = mySpawningFunction;
+        this.timer = 0;
+        this.yay();
+    }
+
+    yay() {
+        this.threshold = Random.int(this.minTime, this.maxTime);
+    }
+
+    /** @param {WorldObject} obj */
+    update(obj) {
+        this.timer++;
+
+        if (this.timer >= this.threshold) {
+            this.spawn();
+            this.yay();
+            this.timer = 0;
+        }
+
+        if (obj.lifeSpan === spawnerCycle) {
+            obj.remove();
+        }
+    }
+
+    static create(mySpawningFunction, minTime, maxTime) {
+        // create scene object
+        let myElement = scene.main.addElement("GeneralSpawner", 0, 0);
+        // attach script as behavior
+        myElement.scripts.add(GENERAL_SPAWNER, mySpawningFunction, minTime, maxTime);
+        // return it to the wonderful person who called create()
+        return myElement;
+    }
+}
+
+//#endregion
+
+//#region spawning
+
+let starSpawners = [
+    [
+        () => BIG_FALLING_STAR.create(ourPlayer.scripts(PLAYER).position.get()),
+        160, 200
+    ],
+    [
+        () => LOVELY_STAR.create(),
+        45, 75
+    ],
+    [
+        () => {
+            if (Random.bool(0.5)) { // was 0.2, then 0.4. Random size used to go down all the way to 5
+                SCROLLING_STAR.create(
+                    Random.int(10, 20),
+                    new Vector2(ourArena.max.x + 75, Random.int(ourArena.min.y + 5, ourArena.max.y - 5)),
+                    new Vector2(-1, 0)
+                );
+            }
+        },
+        15, 15
+    ]
+];
+
 //#endregion
 
 ARENA_WALLS.create(ourArena, 10);
 
-// BIG_FALLING_STAR.create(ourArena.middle);
 let ourPlayer = PLAYER.create(ourArena.middle);
 HEALTH_BAR.create(new Vector2(ourArena.middle.x, ourArena.max.y + 50), 400, 20, ourPlayer);
-// BIG_STAR_SPAWNER.create(ourPlayer);
-let starSpawners = [BIG_STAR_SPAWNER.create, LOVELY_STAR_SPAWNER.create, SCROLLING_STAR_SPAWNER.create];
 
 intervals.continuous((frameCounter) => {
-    if (frameCounter % 1200 === 0) {
+    if (frameCounter % spawnerCycle === 0) {
         Random.shuffle(starSpawners);
-        starSpawners[0](ourPlayer);
-        starSpawners[1](ourPlayer);
-    } 
+        GENERAL_SPAWNER.create(...starSpawners[0]);
+        GENERAL_SPAWNER.create(...starSpawners[1]);
+        
+    }
 });
-
-// hi
