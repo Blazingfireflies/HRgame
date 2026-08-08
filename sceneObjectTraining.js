@@ -2,7 +2,8 @@ canvas.clearScreen = () => (renderer.fill(new Color(0, 0, 0, 1)));
 
 width = 1056;
 height = 590;
-let spawnerCycle = 300; // was 1200
+const PX = 3;
+let spawnerCycle = 600; // was 1200
 let ourArena = new Rect(300, 100, 400, 400);
 scene.physics.gravity.y = 0.3;
 scene.mouseEvents = false;
@@ -53,13 +54,96 @@ let getStarPointVertices = (star) => {
     return goodArray;
 };
 
-
+const fToMs = frames => {
+    return 1000 * frames / intervals.fps;
+};
 
 
 //#endregion
 
 
 //#region classes
+class DESTROY_ON_LEAVE extends ElementScript {
+    init(obj) {
+        this.entered = false;
+    }
+    update(obj) {
+        this.entered ||= obj.onScreen;
+        if (this.entered && !obj.onScreen)
+            obj.remove();
+    }
+}
+
+class OVER_TIME extends ElementScript {
+    init(obj, count, task, delay) {
+        obj.scripts.removeDefault();
+        this.count = count;
+        this.task = task;
+        this.delay = Math.ceil(delay);
+        this.index = 0;
+    }
+    update(obj) {
+        if (this.index >= this.count) {
+            obj.remove();
+        } else if (obj.lifeSpan % this.delay === 0) {
+            this.task(this.index);
+            this.index++;
+        }
+    }
+    static loop(count, task, delay) {
+        const runner = scene.main.addElement("overTime", 0, 0);
+        runner.scripts.add(OVER_TIME, count, task, delay);
+        return runner;
+    }
+}
+
+class SWEEPER extends ElementScript {
+    static SPEED = 3;
+    static ASPECT_RATIO = 2;
+    static IMAGE = loadResource("sweeper.png");
+    static VOLUME_FALLOFF = 8;
+    // static CHAOS = 0.01;
+    init(obj, dirY) {
+        obj.scripts.removeDefault();
+        obj.scripts.add(ONLY_COLLISION);
+        obj.scripts.add(DESTROY_ON_LEAVE);
+        obj.scripts(PHYSICS).velocity.y = dirY * SWEEPER.SPEED;
+    }
+    update(obj) {
+        const DELAY = 10;
+        if (obj.lifeSpan % DELAY === 0) {
+            const player = scene.main.query(PLAYER)[0].transform.position;
+            const model = obj.getModel("default");
+            const distance = model.distanceTo(player);
+            const volume = 1 / (1 + SWEEPER.VOLUME_FALLOFF * distance / Math.sqrt(ourArena.area));
+            mySynth.play({
+                frequency: Random.range(250, 255),
+                duration: fToMs(DELAY),
+                wave: "sine",
+                volume: Number.clamp(volume, 0, 1)
+            });
+        }
+        obj.scripts(PHYSICS).angularVelocity += Random.range(0.01);
+        // obj.scripts(PHYSICS).velocity.rotate(Random.range(SWEEPER.CHAOS));
+    }
+    draw(obj, name, shape) {
+        renderer.image(SWEEPER.IMAGE).rect(shape);
+    }
+    static create(column, normalizedWidth, dirY) {
+        const width = normalizedWidth * ourArena.width;
+        const x = Interpolation.lerp(
+            ourArena.xRange.min,
+            ourArena.xRange.max,
+            column * normalizedWidth
+        ) + width / 2;
+        const height = width / SWEEPER.ASPECT_RATIO;
+        const y = canvas.height / 2 - dirY * (canvas.height + height) / 2;
+        const sweeper = scene.main.addRectElement("sweeper", x, y, width, height);
+        sweeper.scripts.add(SWEEPER, dirY);
+        return sweeper;
+    }
+}
+
 class LOVELY_STAR extends ElementScript {
 
 
@@ -118,24 +202,16 @@ class SMALL_STAR extends ElementScript {
 
     /** @param {WorldObject} obj */
     init(obj, myVector2, myPosition) {
-        obj.scripts.add(ONLY_COLLISION);
         obj.scripts.removeDefault();
+        obj.scripts.add(ONLY_COLLISION);
+        obj.scripts.add(DESTROY_ON_LEAVE);
         // obj.defaultShape = getStar(5, 15, 0.6);
         obj.defaultShape = getStar(5, 15, 0.6);
         obj.transform.rotation = Random.angle();
         obj.transform.position = myPosition;
-        this.starRotation = 0.08;
-        this.myDirection = myVector2.mul(1.5);
+        obj.scripts(PHYSICS).velocity = myVector2.mul(1.5);
+        obj.scripts(PHYSICS).angularVelocity = 0.08;
         //console.log(this.myDirection);
-    }
-
-    /** @param {WorldObject} obj */
-    update(obj) {
-        obj.transform.rotation += this.starRotation;
-        obj.transform.position.add(this.myDirection);
-        if (!obj.onScreen) {
-            obj.remove();
-        }
     }
 
     /**
@@ -176,12 +252,13 @@ class SCROLLING_STAR extends ElementScript {
     /** @param {WorldObject} obj */
     init(obj, mySize, myPosition, mySpeed) {
         obj.scripts.add(ONLY_COLLISION);
+        obj.scripts.add(DESTROY_ON_LEAVE);
         obj.scripts.removeDefault();
         obj.defaultShape = getStar(5, mySize, 0.5);
         obj.transform.rotation = Math.PI;
         obj.transform.position = myPosition;
-        this.speed = mySpeed;
-        this.starRotation = 0.01;
+        obj.scripts(PHYSICS).velocity = mySpeed;
+        obj.scripts(PHYSICS).angularVelocity = 0.01;
         this.opacity = 0;
         this.opacityChange = 0.01;
         // this.myDirection = new Vector2(1,1);
@@ -189,12 +266,7 @@ class SCROLLING_STAR extends ElementScript {
 
     /** @param {WorldObject} obj */
     update(obj) {
-        obj.transform.rotation += this.starRotation;
-        obj.transform.position.add(this.speed);
         this.opacity += this.opacityChange;
-        if (!obj.onScreen) {
-            obj.remove();
-        }
         if (obj.transform.position.x < ourArena.middle.x) {
             this.opacityChange = -0.01;
         }
@@ -230,7 +302,6 @@ class PLAYER extends ElementScript {
         obj.scripts.removeDefault();
         obj.scripts.add(ONLY_COLLISION, false);
         obj.scripts(PHYSICS).gravity = true;
-        obj.scripts(PHYSICS).mobile = true;
         // obj.scripts.add(FALL_OVER);
         obj.transform.position = myPosition;
         obj.defaultShape = Polygon.regular(6, 10);
@@ -323,6 +394,7 @@ class ARENA_WALLS extends ElementScript {
     init(obj, myRectangle, myThickness) {
         obj.scripts.removeDefault();
         obj.scripts.add(ONLY_COLLISION, false);
+        obj.scripts(PHYSICS).mobile = false;
         obj.addShape("Left", new Rect(myRectangle.min.x - myThickness, myRectangle.min.y - myThickness, myThickness, myRectangle.height + myThickness));
         obj.addShape("Right", new Rect(myRectangle.max.x, myRectangle.min.y - myThickness, myThickness, myRectangle.height + myThickness));
         obj.addShape("Up", new Rect(myRectangle.min.x - myThickness, myRectangle.min.y - myThickness, myRectangle.width + myThickness, myThickness));
@@ -351,13 +423,12 @@ class ARENA_WALLS extends ElementScript {
 }
 
 class BIG_FALLING_STAR extends ElementScript {
-
+    static SIZE = 20 * PX;
     init(obj, myTarget) {
         obj.scripts.removeDefault();
         this.position = myTarget;
         this.target = myTarget;
-        this.widthHeight = 50;
-        obj.defaultShape = new Rect(0,0, this.widthHeight, this.widthHeight).center(myTarget);
+        obj.defaultShape = new Rect(0,0, BIG_FALLING_STAR.SIZE, BIG_FALLING_STAR.SIZE).center(myTarget);
         this.star = false;
     }
 
@@ -365,7 +436,6 @@ class BIG_FALLING_STAR extends ElementScript {
     update(obj) {
         if (obj.lifeSpan === 90) {
             obj.scripts.add(ONLY_COLLISION);
-            obj.scripts(PHYSICS).mobile = true;
             obj.defaultShape = getStar(5, 75, 0.5);
             const distanceMovedX = Random.int(-200, 200);
             const distanceMovedY = this.target.y - (ourArena.min.y - 100);
@@ -415,16 +485,18 @@ class BIG_FALLING_STAR extends ElementScript {
 class ONLY_COLLISION extends ElementScript {
     /** @param {WorldObject} obj */
     init(obj, trigger = true) { // if trigger isn't there, defaults to true
-        obj.scripts.add(PHYSICS, false);
+        obj.scripts.add(PHYSICS, true);
         obj.scripts(PHYSICS).gravity = false;
         obj.scripts(PHYSICS).airResistance = false;
         obj.scripts(PHYSICS).friction = 0;
         obj.scripts(PHYSICS).isTrigger = trigger;
     }
+    collideRule(obj, other) {
+        return !(obj.scripts(PHYSICS).isTrigger && other.scripts(PHYSICS).isTrigger);
+    }
 }
 
 class HEALTH_BAR extends ElementScript {
-
     init(obj, myPlayer) {
         this.maxWidth = obj.defaultShape.width;
         this.myPlayer = myPlayer;
@@ -514,11 +586,26 @@ let starSpawners = [
                 SCROLLING_STAR.create(
                     Random.int(10, 20),
                     new Vector2(ourArena.max.x + 75, Random.int(ourArena.min.y + 5, ourArena.max.y - 5)),
-                    new Vector2(-1, 0)
+                    Vector2.left
                 );
             }
         },
         15, 15
+    ],
+    [
+        () => {
+            const COLUMNS = Math.floor(ourArena.width / (40 * PX));
+            const BATCH = 1;
+            const DURATION = 200;
+            const BATCHES = Math.ceil(COLUMNS / BATCH);
+            const columns = Array.dim(COLUMNS).map((_, i) => i);
+            Random.shuffle(columns);
+            OVER_TIME.loop(BATCHES, i => {
+                for (let j = 0; j < BATCH; j++)
+                    SWEEPER.create(columns[i * BATCH + j], 1 / COLUMNS, Random.sign());
+            }, DURATION / BATCHES);
+        },
+        500, 500
     ]
 ];
 
