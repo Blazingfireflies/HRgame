@@ -13,7 +13,8 @@ const mySynth = new Synth();
 const explodeSound = loadResource("explode.mp3");
 /** @type {Sound} */
 const hitSound = loadResource("graze.mp3");
-const warning = loadResource("!2.png"); 
+const warning = loadResource("!2.png");
+const wand = loadResource("wand.png");
 
 //#region functions
 
@@ -57,6 +58,8 @@ let getStarPointVertices = (star) => {
 const fToMs = frames => {
     return 1000 * frames / intervals.fps;
 };
+
+
 
 
 //#endregion
@@ -176,7 +179,7 @@ class LOVELY_STAR extends ElementScript {
             explodeSound.play(0.3);
             let myStarPoints = getStarPointVertices(obj);
             for (let i = 0; i < myStarPoints.length; i++) {
-                SMALL_STAR.create(myStarPoints[i].get(), obj.transform.position.get());
+                SMALL_STAR.create(obj.transform.position.get(), myStarPoints[i].get());
             }
             obj.remove();
         }
@@ -201,15 +204,14 @@ class LOVELY_STAR extends ElementScript {
 class SMALL_STAR extends ElementScript {
 
     /** @param {WorldObject} obj */
-    init(obj, myVector2, myPosition) {
+    init(obj, myVelocity = Vector2.zero, mySize = 15, myPointiness = 0.6) {
         obj.scripts.removeDefault();
         obj.scripts.add(ONLY_COLLISION);
         obj.scripts.add(DESTROY_ON_LEAVE);
         // obj.defaultShape = getStar(5, 15, 0.6);
-        obj.defaultShape = getStar(5, 15, 0.6);
+        obj.defaultShape = getStar(5, mySize, myPointiness);
         obj.transform.rotation = Random.angle();
-        obj.transform.position = myPosition;
-        obj.scripts(PHYSICS).velocity = myVector2.mul(1.5);
+        obj.scripts(PHYSICS).velocity = myVelocity.mul(1.5);
         obj.scripts(PHYSICS).angularVelocity = 0.08;
         //console.log(this.myDirection);
     }
@@ -234,14 +236,13 @@ class SMALL_STAR extends ElementScript {
     }
 
     /** @param {WorldObject} obj */
-    static create(myVector2, myPosition) {
+    static create(myPosition, myVelocity, mySize, myPointiness) {
         // console.log(myVector2);
         // create scene object
-        let myElement = scene.main.addElement("SmallStar", 0, 0);
-
+        let myElement = scene.main.addElement("SmallStar", myPosition);
         // console.log(this.myDirection);
         // attach script as behavior
-        myElement.scripts.add(SMALL_STAR, myVector2, myPosition);
+        myElement.scripts.add(SMALL_STAR, myVelocity, mySize, myPointiness);
         // return it to the wonderful person who called create()
         return myElement;
     }
@@ -423,37 +424,27 @@ class ARENA_WALLS extends ElementScript {
 }
 
 class BIG_FALLING_STAR extends ElementScript {
-    static SIZE = 20 * PX;
     init(obj, myTarget) {
         obj.scripts.removeDefault();
-        this.position = myTarget;
-        this.target = myTarget;
-        obj.defaultShape = new Rect(0,0, BIG_FALLING_STAR.SIZE, BIG_FALLING_STAR.SIZE).center(myTarget);
-        this.star = false;
+        obj.scripts.add(ONLY_COLLISION);
+        obj.defaultShape = getStar(5, 75, 0.5);
+        const distanceMovedX = Random.range(200);
+        const distanceMovedY = myTarget.y - (ourArena.min.y - 100);
+        obj.transform.position = new Vector2(myTarget.x + distanceMovedX, ourArena.min.y - 100);
+        obj.scripts(PHYSICS).velocity = new Vector2(-distanceMovedX / 60, distanceMovedY / 60);
+        obj.scripts(PHYSICS).angularVelocity = 0.1;
     }
 
     /** @param {WorldObject} obj */
     update(obj) {
-        if (obj.lifeSpan === 90) {
-            obj.scripts.add(ONLY_COLLISION);
-            obj.defaultShape = getStar(5, 75, 0.5);
-            const distanceMovedX = Random.int(-200, 200);
-            const distanceMovedY = this.target.y - (ourArena.min.y - 100);
-            obj.transform.position = new Vector2(this.target.x + distanceMovedX, ourArena.min.y - 100);
-            // obj.transform.position = ourArena.middle;
-            obj.scripts(PHYSICS).velocity = new Vector2(-distanceMovedX / 60, distanceMovedY / 60);
-            obj.scripts(PHYSICS).angularVelocity = 0.1;
-            this.star = true;
-        }
-
-        if (obj.lifeSpan > 150) {
+        if (obj.lifeSpan > 60) {
             const hitWall = !!obj.scripts(PHYSICS).colliding.test((collision) => {
                 return collision.element.scripts.has(ARENA_WALLS);
             });
             if (hitWall) {
                 const count = Random.int(8, 12);
                 for (let i = 0; i < count; i++) {
-                    SMALL_STAR.create(Random.circle(0.5), obj.transform.position.get());
+                    SMALL_STAR.create(obj.transform.position.get(), Random.circle(0.5));
                 }
                 obj.remove();
             }
@@ -462,15 +453,8 @@ class BIG_FALLING_STAR extends ElementScript {
     }
 
     draw(obj, name, shape) {
-        if (!this.star) {
-            // renderer.stroke(new Color(255, 0, 0, 1), 10, LineCap.ROUND, LineJoin.ROUND).shape(shape);
-            renderer.image(warning).rect(shape);
-        }
-        else {
-            renderer.draw(new Color(255, 255, 255, 1)).shape(shape);
-        }
+        renderer.draw(new Color(255, 255, 255, 1)).shape(shape);
     }
-
 
     static create(myTarget) {
         let myElement = scene.main.addElement("BigFallingStar", 0, 0);
@@ -567,13 +551,51 @@ class GENERAL_SPAWNER extends ElementScript {
     }
 }
 
+class WARNING extends ElementScript {
+    init(obj, image, rotation, expirationTime, spawn, persistence = 0) {
+        obj.scripts.removeDefault();
+        this.image = image;
+        obj.transform.rotation = rotation;
+        this.expirationTime = expirationTime;
+        this.persistence = persistence;
+        this.spawn = spawn;
+        this.duration = expirationTime + persistence;
+    }
+
+    /** @param {WorldObject} obj */
+    update(obj) {
+        if (obj.lifeSpan === this.expirationTime) {
+            this.spawn();
+        }
+        if (obj.lifeSpan === this.duration) {
+            obj.remove();
+        }
+    }
+
+    draw(obj, name, shape) {
+        renderer.image(this.image).rect(shape);
+    }
+
+    static create(image, position, rotation, expirationTime, spawn, persistence) {
+        // create scene object
+        let myElement = scene.main.addRectElement("Warning", position, image.width * PX, image.height * PX);
+        // attach script as behavior
+        myElement.scripts.add(WARNING, image, rotation, expirationTime, spawn, persistence);
+        // return it to the wonderful person who called create()
+        return myElement;
+    }
+}
+
 //#endregion
 
 //#region spawning
 
 let starSpawners = [
     [
-        () => BIG_FALLING_STAR.create(ourPlayer.scripts(PLAYER).position.get()),
+        () => {
+            const position = ourPlayer.scripts(PLAYER).position.get();
+            WARNING.create(warning, position, 0, 90, () => BIG_FALLING_STAR.create(position))
+        },
         160, 200
     ],
     [
@@ -606,9 +628,45 @@ let starSpawners = [
             }, DURATION / BATCHES);
         },
         500, 500
+    ],
+    [
+        () => {
+            const position = new Vector2(Random.range(ourArena.min.x - 20, ourArena.max.x + 20), ourArena.min.y - 20);
+            const funPosition = position.plus(new Vector2(-30, -40));
+            const starCount = 10;
+            let wandAnimateVelocity = 0;
+            const timeBetween = 4;
+            const myWand = WARNING.create(
+                wand, funPosition, 0, 40,
+                () => {
+                    const avgSpeed = 2;
+                    const speedVar = 0.3;
+                    const directionVar = 0.15;
+
+                    OVER_TIME.loop(starCount, i => {
+                        const finalPos = ourPlayer.transform.position;
+                        const direction = finalPos.minus(position).normalized;
+                        const yourPath = direction.times(avgSpeed + Random.range(speedVar)).rotate(Random.range(directionVar));
+                        SMALL_STAR.create(position, yourPath, Random.range(10, 20), Random.range(0.5, 0.7));
+                        explodeSound.play(0.1);
+                    }, timeBetween);
+                },
+                starCount*timeBetween + 10
+            );
+            intervals.transition((t) => {
+                const frames = t * myWand.scripts(WARNING).duration
+                if (frames < 30) {
+                    wandAnimateVelocity += 0.015;
+                }
+                else if (frames < 40) {
+                    wandAnimateVelocity -= 0.045;
+                }
+                myWand.transform.rotation += wandAnimateVelocity;
+            }, myWand.scripts(WARNING).duration);
+        },
+        100, 140
     ]
 ];
-
 //#endregion
 
 ARENA_WALLS.create(ourArena, 10);
@@ -617,10 +675,14 @@ let ourPlayer = PLAYER.create(ourArena.middle);
 HEALTH_BAR.create(new Vector2(ourArena.middle.x, ourArena.max.y + 50), 400, 20, ourPlayer);
 
 intervals.continuous((frameCounter) => {
-    if (frameCounter % spawnerCycle === 0) {
-        Random.shuffle(starSpawners);
-        GENERAL_SPAWNER.create(...starSpawners[0]);
-        GENERAL_SPAWNER.create(...starSpawners[1]);
-        
+    if (frameCounter % spawnerCycle === 0 && frameCounter < 5000) {
+        if (starSpawners.length > 1) {
+            Random.shuffle(starSpawners);
+            GENERAL_SPAWNER.create(...starSpawners[0]);
+            GENERAL_SPAWNER.create(...starSpawners[1]);
+        }
+        else {
+            GENERAL_SPAWNER.create(...starSpawners[0]);
+        }
     }
 });
