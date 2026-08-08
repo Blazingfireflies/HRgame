@@ -15,6 +15,7 @@ const explodeSound = loadResource("explode.mp3");
 const hitSound = loadResource("graze.mp3");
 const warning = loadResource("!2.png");
 const wand = loadResource("wand.png");
+const lovelyFont = new Font(12, "Anxiety");
 
 //#region functions
 
@@ -685,4 +686,5 @@ intervals.continuous((frameCounter) => {
             GENERAL_SPAWNER.create(...starSpawners[0]);
         }
     }
+    ui.draw(new Color("White")).text(lovelyFont, ""+frameCounter, new Vector2(800,300), 100);
 });
